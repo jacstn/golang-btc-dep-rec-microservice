@@ -13,7 +13,7 @@ func getBitcoinCliPath() string {
 	return os.Getenv("BITCOIN_CLI")
 }
 
-func ListTransactions() models.RawTransactions {
+func ListTransactions() (models.RawTransactions, error) {
 	cmd := exec.Command(getBitcoinCliPath(), "listsinceblock")
 	out, err := cmd.Output()
 
@@ -23,7 +23,7 @@ func ListTransactions() models.RawTransactions {
 		} else if err.Error() == "exit status 1" {
 			log.Println("bitcoin deamon not installed or other unexpected error")
 		}
-		return models.RawTransactions{}
+		return models.RawTransactions{}, err
 	}
 
 	var transactions models.RawTransactions
@@ -32,6 +32,7 @@ func ListTransactions() models.RawTransactions {
 
 	if err != nil {
 		log.Println("Cannot parse bitcoin-cli output json")
+		return models.RawTransactions{}, err
 	}
-	return transactions
+	return transactions, nil
 }

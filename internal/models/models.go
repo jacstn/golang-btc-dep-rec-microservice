@@ -9,87 +9,42 @@ import (
 
 type Deposit struct {
 	TxId          string
-	Vout          string
+	Vout          int16
 	Address       string
 	Amount        float64
 	Category      string
-	Confirmations int8
+	Confirmations int16
 }
 
-type Customer struct {
-	Id   uint64
-	Name string
-}
+func (d *Deposit) Save(db *sql.DB) error {
+	dep := Deposit{}
 
-func NewCustomer(db *sql.DB, c *Customer) (int64, error) {
-	res, err := db.Exec("INSERT INTO `customer` (name) values (?)", c.Name)
+	serr := db.QueryRow("SELECT txid FROM btc_deposit where txid=? and vout=?", dep.TxId, dep.Vout).Scan(&dep.TxId)
 
-	if err != nil {
-		fmt.Println("error while inserting into database", err)
-		return 0, err
-	}
+	if serr == nil {
+		// record already exists, update confirmations only
 
-	id, err := res.LastInsertId()
-	if err != nil {
-		println("Error:", err.Error())
-		return 0, err
-	}
+		_, uerr := db.Exec("UPDATE `btc_deposit` set confirmations=? where txid=? and vout=?", d.Confirmations, d.TxId, d.Vout)
 
-	return id, nil
-}
-
-func (c *Customer) Save(db *sql.DB, a *Address) error {
-	var err error
-
-	if c.Id == 0 {
-		_, err = db.Exec("INSERT INTO `customer` (name) values (?)", a.CustomerId, a.Address)
-		if err != nil {
-			log.Println(err)
-			return errors.New("Customer, unable to insert new record")
+		if uerr != nil {
+			log.Println("update erorr")
+			log.Println(uerr)
+			return fmt.Errorf("cannot update row %s", d.TxId)
 		}
 		return nil
 	}
-	_, err = db.Exec("Update `customer` set name=?, address=?", a.CustomerId, a.Address)
 
-	if err != nil {
-		log.Println(err)
-		return errors.New("Customer, unable to update record")
-	}
-	return nil
-}
-
-func ListCustomers(db *sql.DB) ([]Customer, error) {
-	res, err := db.Query("SELECT * FROM `order` ORDER BY createdAt DESC LIMIT 20")
-	if err != nil {
-		fmt.Println("error while selecting orders from database")
-		return []Customer{}, err
+	if serr.Error() != "sql: no rows in result set" {
+		// not standard error, return error
+		log.Println(serr)
+		return errors.New("backend error")
 	}
 
-	var customers []Customer
-
-	for res.Next() {
-		var c Customer
-		err := res.Scan(&c.Id, &c.Name)
-
-		if err != nil {
-			log.Println(err)
-			return customers, err
-		}
-		customers = append(customers, c)
-	}
-	return customers, nil
-}
-
-type Address struct {
-	CustomerId string
-	Address    string
-}
-
-func (a *Address) Save(db *sql.DB) error {
-	_, err := db.Exec("INSERT into `address` set cucstomerId=?, address=?", a.CustomerId, a.Address)
+	_, err := db.Exec("INSERT INTO `btc_deposit` (address, amount, category, confirmations, txid, vout) values (?, ?, ?, ?, ?, ?)", d.Address, d.Amount, d.Category, d.Confirmations, d.TxId, d.Vout)
 
 	if err != nil {
-		log.Println(err)
+		log.Println("insert error")
+		log.Println(err, d.Address)
 		return errors.New("Address, unable to insert record")
 	}
 	return nil
